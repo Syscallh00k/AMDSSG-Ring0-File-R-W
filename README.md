@@ -10,16 +10,7 @@ The driver validates that AMD SSG hardware (`DEV_7300` or `DEV_6862`) is present
 **Tested on Windows 10 22H2.** Newer versions of Windows may block loading the driver due to driver signing policy changes.
 
 # How To Use
-
-### Step 1 — Enable Test Signing
-```
-bcdedit /set testsigning on
-bcdedit /set nointegritychecks on
-bcdedit /set loadoptions DDISABLE_INTEGRITY_CHECKS
-shutdown /r /t 0
-```
-
-### Step 2 — Install the Driver
+### Step 1 — Install the Driver
 After reboot, copy `amdssg64.sys` and create the kernel service:
 ```
 copy amdssg64.sys C:\Windows\System32\drivers\amdssg64.sys
