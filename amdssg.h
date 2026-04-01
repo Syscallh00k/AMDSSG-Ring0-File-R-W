@@ -158,9 +158,9 @@ namespace Legend {
             connected = false;
         }
 
-        [[nodiscard]] auto get_device_handle() const -> HANDLE { return device_handle; }
-        [[nodiscard]] auto get_session_id() const -> uint32_t { return session_id; }
-        [[nodiscard]] auto is_connected() const -> bool { return connected; }
+        [[nodiscard]] auto GetDeviceHandle() const -> HANDLE { return device_handle; }
+        [[nodiscard]] auto GetSessionId() const -> uint32_t { return session_id; }
+        [[nodiscard]] auto IsConnected() const -> bool { return connected; }
 
         auto OpenFile(const wchar_t *file_path, uint32_t access_flags, PLFFSR_OPEN_OUTPUT out) -> NTSTATUS {
             if (!connected || !file_path || !out)
