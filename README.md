@@ -21,7 +21,9 @@ If you do not have the required hardware, see **Step 4** below to patch the vali
 
 ### Note 
 ```
-Unless you have AMD Radeon SSG or AMD Radeon Pro this exploit wil not work for you. If your wanting to test if this exploit does work in general. You can follow these steps, this will not hold up against edr or any av unles
+Unless you have AMD Radeon SSG or AMD Radeon Pro this exploit wil not work for you.
+If your wanting to test if this exploit does work in general. You can follow these steps,
+this will not hold up against edr or any av unless
 you have the correct PCI Device needed for this driver!
 ```
 
