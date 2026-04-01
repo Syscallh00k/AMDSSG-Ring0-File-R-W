@@ -18,8 +18,8 @@ These are AMD Radeon Pro / SSG series GPUs with onboard SSD storage. Without one
 If you do not have the required hardware, see **Step 4** below to patch the validation out of the driver.
 
 # Amd Website 
-```
 Driver was obtained in this driver pack from winows 10 64bit
+```
 https://www.amd.com/en/support/downloads/drivers.html/graphics/radeon-r9-r7-r5/radeon-r9-200-series/amd-radeon-r9-280.html
 ```
 
